@@ -89,4 +89,12 @@ class Product extends Model
     {
         return $this->hasMany(SaleItem::class);
     }
+
+    /**
+     * Get the stock logs for the product.
+     */
+    public function stockLogs(): HasMany
+    {
+        return $this->hasMany(StockLog::class);
+    }
 }
