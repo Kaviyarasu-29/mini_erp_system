@@ -16,7 +16,11 @@ class CategoryController extends Controller
             ->orderBy('name')
             ->get();
 
-        return view('masters.categories.index', compact('categories'));
+        $parentCategories = Category::whereNull('parent_id')
+            ->orderBy('name')
+            ->get();
+
+        return view('masters.categories.index', compact('categories', 'parentCategories'));
     }
 
     /**

@@ -24,7 +24,7 @@ return new class extends Migration
 
             $table->unsignedBigInteger('ref_1')->nullable();
             $table->unsignedBigInteger('ref_2')->nullable();
-        $table->unsignedBigInteger('ref_3')->nullable();
+            $table->unsignedBigInteger('ref_3')->nullable();
 
             $table->timestamps();
         });

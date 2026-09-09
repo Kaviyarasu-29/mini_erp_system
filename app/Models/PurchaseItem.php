@@ -15,7 +15,9 @@ class PurchaseItem extends Model
     protected $fillable = [
         'purchase_id',
         'product_id',
+        'barcode',
         'quantity',
+        'stock_quantity',
         'unit_cost',
         'tax_rate',
         'tax_amount',
@@ -31,6 +33,7 @@ class PurchaseItem extends Model
     {
         return [
             'quantity' => 'decimal:3',
+            'stock_quantity' => 'decimal:3',
             'unit_cost' => 'decimal:2',
             'tax_rate' => 'decimal:2',
             'tax_amount' => 'decimal:2',

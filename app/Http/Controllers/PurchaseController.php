@@ -7,6 +7,7 @@ use App\Models\Purchase;
 use App\Models\PurchaseItem;
 use App\Models\StockLog;
 use App\Models\Supplier;
+use App\Models\Tax;
 use App\Services\CodeGeneratorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -31,9 +32,10 @@ class PurchaseController extends Controller
     public function create()
     {
         $suppliers = Supplier::where('is_active', true)->orderBy('name')->get();
-        $products = Product::where('is_active', true)->orderBy('name')->get();
+        $products = Product::with('tax')->where('is_active', true)->orderBy('name')->get();
+        $taxes = Tax::where('is_active', true)->orderBy('name')->get();
 
-        return view('purchases.create', compact('suppliers', 'products'));
+        return view('purchases.create', compact('suppliers', 'products', 'taxes'));
     }
 
     /**
@@ -103,10 +105,14 @@ class PurchaseController extends Controller
                 $lineTax = $lineSubtotal * ($rate / 100);
                 $lineTotal = $lineSubtotal + $lineTax;
 
+                $barcode = CodeGeneratorService::generateBarcode(PurchaseItem::class, 'barcode', 'BC', 3);
+
                 $purchaseItem = PurchaseItem::create([
                     'purchase_id' => $purchase->id,
                     'product_id' => $itemData['product_id'],
+                    'barcode' => $barcode,
                     'quantity' => $qty,
+                    'stock_quantity' => $qty,
                     'unit_cost' => $cost,
                     'tax_rate' => $rate,
                     'tax_amount' => $lineTax,
@@ -133,15 +139,26 @@ class PurchaseController extends Controller
     }
 
     /**
+     * Display the specified resource.
+     */
+    public function show(Purchase $purchase)
+    {
+        $purchase->load(['supplier', 'items.product.unit']);
+
+        return view('purchases.show', compact('purchase'));
+    }
+
+    /**
      * Show the form for editing the specified resource.
      */
     public function edit(Purchase $purchase)
     {
         $purchase->load(['supplier', 'items.product']);
         $suppliers = Supplier::where('is_active', true)->orderBy('name')->get();
-        $products = Product::where('is_active', true)->orderBy('name')->get();
+        $products = Product::with('tax')->where('is_active', true)->orderBy('name')->get();
+        $taxes = Tax::where('is_active', true)->orderBy('name')->get();
 
-        return view('purchases.edit', compact('purchase', 'suppliers', 'products'));
+        return view('purchases.edit', compact('purchase', 'suppliers', 'products', 'taxes'));
     }
 
     /**
@@ -201,10 +218,14 @@ class PurchaseController extends Controller
                 $lineTax = $lineSubtotal * ($rate / 100);
                 $lineTotal = $lineSubtotal + $lineTax;
 
+                $barcode = CodeGeneratorService::generateBarcode(PurchaseItem::class, 'barcode', 'BC', 3);
+
                 $purchaseItem = PurchaseItem::create([
                     'purchase_id' => $purchase->id,
                     'product_id' => $itemData['product_id'],
+                    'barcode' => $barcode,
                     'quantity' => $qty,
+                    'stock_quantity' => $qty,
                     'unit_cost' => $cost,
                     'tax_rate' => $rate,
                     'tax_amount' => $lineTax,

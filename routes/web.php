@@ -10,6 +10,10 @@ use App\Http\Controllers\TaxController;
 use App\Http\Controllers\UnitController;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/', function () {
+    return redirect()->route('purchases.index');
+});
+
 // Masters
 Route::prefix('masters')->name('masters.')->group(function () {
 
@@ -73,6 +77,7 @@ Route::controller(PurchaseController::class)->prefix('purchases')->name('purchas
     Route::get('/', 'index')->name('index');
     Route::get('/new', 'new')->name('new');
     Route::post('/', 'store')->name('store');
+    Route::get('/{purchase}', 'show')->name('show');
     Route::get('/{purchase}/edit', 'edit')->name('edit');
     Route::put('/{purchase}', 'update')->name('update');
     Route::delete('/{purchase}', 'destroy')->name('destroy');
@@ -82,7 +87,9 @@ Route::controller(PurchaseController::class)->prefix('purchases')->name('purchas
 Route::controller(SaleController::class)->prefix('sales')->name('sales.')->group(function () {
     Route::get('/', 'index')->name('index');
     Route::get('/new', 'new')->name('new');
+    Route::get('/scan/{code}', 'scanBarcode')->name('scan');
     Route::post('/', 'store')->name('store');
+    Route::get('/{sale}', 'show')->name('show');
     Route::get('/{sale}/edit', 'edit')->name('edit');
     Route::put('/{sale}', 'update')->name('update');
     Route::delete('/{sale}', 'destroy')->name('destroy');

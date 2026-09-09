@@ -11,15 +11,15 @@ return new class extends Migration
      */
     public function up(): void
     {
-        if (!Schema::hasColumn('purchases', 'purchase_number')) {
+        if (! Schema::hasColumn('purchases', 'purchase_number')) {
             Schema::table('purchases', function (Blueprint $table) {
                 $table->string('purchase_number')->unique()->after('id');
             });
         }
 
-        if (!Schema::hasColumn('sales', 'sale_number')) {
+        if (! Schema::hasColumn('sales', 'sale_number')) {
             Schema::table('sales', function (Blueprint $table) {
-                $table->string('sale_number')->unique()->after('id');
+                $table->string('sale_number')->nullable()->unique()->after('id');
             });
         }
     }

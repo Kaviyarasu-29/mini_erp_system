@@ -20,7 +20,6 @@ class Product extends Model
         'tax_id',
         'name',
         'sku',
-        'barcode',
         'purchase_price',
         'selling_price',
         'stock_quantity',

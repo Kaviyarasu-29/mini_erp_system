@@ -6,7 +6,6 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\Tax;
 use App\Models\Unit;
-use App\Services\CodeGeneratorService;
 use Illuminate\Http\Request;
 
 class ProductController extends Controller
@@ -20,7 +19,12 @@ class ProductController extends Controller
             ->latest()
             ->paginate(10);
 
-        return view('masters.products.index', compact('products'));
+        $categories = Category::whereNull('parent_id')->orderBy('name')->get();
+        $subcategories = Category::whereNotNull('parent_id')->orderBy('name')->get();
+        $units = Unit::where('is_active', true)->orderBy('name')->get();
+        $taxes = Tax::where('is_active', true)->orderBy('name')->get();
+
+        return view('masters.products.index', compact('products', 'categories', 'subcategories', 'units', 'taxes'));
     }
 
     /**
@@ -56,18 +60,12 @@ class ProductController extends Controller
             'tax_id' => ['nullable', 'exists:taxes,id'],
             'name' => ['required', 'string', 'max:255'],
             'sku' => ['required', 'string', 'max:100', 'unique:products,sku'],
-            'barcode' => ['nullable', 'string', 'max:100'],
             'purchase_price' => ['required', 'numeric', 'min:0'],
             'selling_price' => ['required', 'numeric', 'min:0'],
-            'stock_quantity' => ['nullable', 'numeric', 'min:0'],
             'is_active' => ['boolean'],
         ]);
 
-        if (empty($validated['barcode'])) {
-            $validated['barcode'] = CodeGeneratorService::generateBarcode(Product::class, 'barcode', 'A', 3);
-        }
-
-        $validated['stock_quantity'] = $validated['stock_quantity'] ?? 0;
+        $validated['stock_quantity'] = 0;
         $validated['is_active'] = $request->has('is_active');
 
         Product::create($validated);
@@ -101,11 +99,9 @@ class ProductController extends Controller
             'unit_id' => ['required', 'exists:units,id'],
             'tax_id' => ['nullable', 'exists:taxes,id'],
             'name' => ['required', 'string', 'max:255'],
-            'sku' => ['required', 'string', 'max:100', 'unique:products,sku,' . $product->id],
-            'barcode' => ['nullable', 'string', 'max:100'],
+            'sku' => ['required', 'string', 'max:100', 'unique:products,sku,'.$product->id],
             'purchase_price' => ['required', 'numeric', 'min:0'],
             'selling_price' => ['required', 'numeric', 'min:0'],
-            'stock_quantity' => ['nullable', 'numeric', 'min:0'],
             'is_active' => ['boolean'],
         ]);
 

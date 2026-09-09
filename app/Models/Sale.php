@@ -16,6 +16,7 @@ class Sale extends Model
     protected $fillable = [
         'customer_id',
         'invoice_number',
+        'sale_number',
         'sold_at',
         'subtotal',
         'tax_amount',
