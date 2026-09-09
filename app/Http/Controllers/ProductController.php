@@ -32,12 +32,7 @@ class ProductController extends Controller
      */
     public function create()
     {
-        $categories = Category::whereNull('parent_id')->orderBy('name')->get();
-        $subcategories = Category::whereNotNull('parent_id')->orderBy('name')->get();
-        $units = Unit::where('is_active', true)->orderBy('name')->get();
-        $taxes = Tax::where('is_active', true)->orderBy('name')->get();
-
-        return view('masters.products.create', compact('categories', 'subcategories', 'units', 'taxes'));
+        return redirect()->route('masters.products.index');
     }
 
     /**
@@ -80,12 +75,7 @@ class ProductController extends Controller
      */
     public function edit(Product $product)
     {
-        $categories = Category::whereNull('parent_id')->orderBy('name')->get();
-        $subcategories = Category::whereNotNull('parent_id')->orderBy('name')->get();
-        $units = Unit::where('is_active', true)->orderBy('name')->get();
-        $taxes = Tax::where('is_active', true)->orderBy('name')->get();
-
-        return view('masters.products.edit', compact('product', 'categories', 'subcategories', 'units', 'taxes'));
+        return redirect()->route('masters.products.index');
     }
 
     /**

@@ -75,6 +75,7 @@ Route::prefix('masters')->name('masters.')->group(function () {
 // Purchases
 Route::controller(PurchaseController::class)->prefix('purchases')->name('purchases.')->group(function () {
     Route::get('/', 'index')->name('index');
+    Route::get('/create', 'create')->name('create');
     Route::get('/new', 'new')->name('new');
     Route::post('/', 'store')->name('store');
     Route::get('/{purchase}', 'show')->name('show');
@@ -86,6 +87,7 @@ Route::controller(PurchaseController::class)->prefix('purchases')->name('purchas
 // Sales
 Route::controller(SaleController::class)->prefix('sales')->name('sales.')->group(function () {
     Route::get('/', 'index')->name('index');
+    Route::get('/create', 'create')->name('create');
     Route::get('/new', 'new')->name('new');
     Route::get('/scan/{code}', 'scanBarcode')->name('scan');
     Route::post('/', 'store')->name('store');

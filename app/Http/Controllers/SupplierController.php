@@ -22,7 +22,7 @@ class SupplierController extends Controller
      */
     public function create()
     {
-        return view('masters.suppliers.create');
+        return redirect()->route('masters.suppliers.index');
     }
 
     /**
@@ -60,7 +60,7 @@ class SupplierController extends Controller
      */
     public function edit(Supplier $supplier)
     {
-        return view('masters.suppliers.edit', compact('supplier'));
+        return redirect()->route('masters.suppliers.index');
     }
 
     /**

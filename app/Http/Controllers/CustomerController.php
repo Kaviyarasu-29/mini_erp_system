@@ -22,7 +22,7 @@ class CustomerController extends Controller
      */
     public function create()
     {
-        return view('masters.customers.create');
+        return redirect()->route('masters.customers.index');
     }
 
     /**
@@ -60,7 +60,7 @@ class CustomerController extends Controller
      */
     public function edit(Customer $customer)
     {
-        return view('masters.customers.edit', compact('customer'));
+        return redirect()->route('masters.customers.index');
     }
 
     /**
