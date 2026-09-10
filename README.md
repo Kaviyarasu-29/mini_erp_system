@@ -1,58 +1,167 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Mini ERP System
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A modern, responsive Enterprise Resource Planning (ERP) application built with **Laravel 11**, **PHP 8.3**, and **Bootstrap 5**. Designed for inventory management, purchase order handling, point-of-sale barcode scanning, batch-level stock tracking, automated audit logs, and asynchronous order notifications.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Demo Media & Documentation
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+📁 **[Google Drive Folder: Demo Videos & Screenshot PDFs](https://drive.google.com/drive/folders/1XQrojmhCfTCcck8UeUBeWvN9IYtWON5l?usp=sharing)**
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+The Google Drive repository includes the following demonstration videos and screenshot PDF documentation:
 
-## Learning Laravel
+- 🎬 **`AI-Prompt.mp4`**: Video recording of AI prompt interactions & development session.
+- 🎬 **`Mini-ERP-System.mp4`**: Comprehensive video demo of the Mini ERP System (Purchases, Sales, Barcode Scanning, Stock Tracking & Notifications).
+- 📄 **`Prompts-Screenshots.pdf`**: PDF document containing detailed screenshots of AI prompts and workflows.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+---
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Key Modules & Features
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+### 1. Purchase Order Management
+- **Auto-Generated Invoice Numbers**: Automatically creates month-based purchase invoice numbers (e.g., `SEP001`, `SEP002`) via `CodeGeneratorService`.
+- **Batch Barcode Generation**: Automatically generates unique item barcodes (e.g., `BC001`, `BC002`) for each purchase line item.
+- **Batch Stock Allocation**: Tracks available stock per purchase item batch (`stock_quantity`) and increments overall product stock.
+- **Stock Audit Logging**: Records `+` mode stock logs in `stock_logs` linking the purchase ID, purchase item ID, and supplier ID.
+- **Detailed Purchase Cards**: Provides invoice headers, line-item breakdowns, tax calculations, and total amount summaries.
 
-## Agentic Development
+### 2. Sales & Barcode Scanning (POS)
+- **Barcode Lookup (AJAX)**: Scanning a purchase item barcode (`/sales/scan/{code}`) instantly retrieves product details, SKU, selling price, and tax rate via AJAX.
+- **Auto-Generated Sale Invoices**: Month-based sale invoice numbers (`SEP001`, `SEP002`...) generated automatically.
+- **Batch Stock Deduction**: Deducts stock from specific `PurchaseItem` batches based on scanned barcode or FIFO order, alongside decrementing overall `Product` stock.
+- **Stock Audit Logging**: Records `-` mode stock logs in `stock_logs` referencing the sale ID, sale item ID, and customer ID.
+- **Payment & Order Statuses**: Manages payment methods (`Cash`, `UPI`, `Credit Card`, `Bank Transfer`), payment statuses (`Paid`, `Pending`, `Partial`), and order statuses (`Completed`, `Pending`, `Cancelled`).
+- **Stock Restoration**: Editing or deleting a sale automatically restores batch and product stock levels.
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+### 3. Asynchronous Order Notification System
+- **Queued Job Processing**: `SendOrderNotificationJob` runs via Laravel Queued Jobs (`database` driver) to log order events without blocking HTTP request cycles.
+- **Notification Service**: `OrderNotificationService` formats templates for order events (`created`, `updated`, `completed`, `cancelled`).
+- **Audit Logging**: Asynchronously logs notifications to Laravel log storage (`Log::info`).
 
-```bash
-composer require laravel/boost --dev
+### 4. Master Data Management
+- **Hierarchical Categories**: Parent categories and subcategories (e.g., *Electronics* $\rightarrow$ *Mobile Phones*).
+- **Units of Measurement**: Standardized measurement units (`pcs`, `kg`, `g`, `L`, `box`, `pkt`, `set`, `pair`, `mtr`).
+- **Tax Slabs**: Flexible tax rates (`Exempt 0%`, `GST 5%`, `GST 12%`, `GST 18%`, `GST 28%`).
+- **Customers & Suppliers**: Master directories with relationship deletion safeguards (prevents deleting items linked to active sales or purchases).
+- **Product Catalog**: Products defined with SKU, category, subcategory, unit, tax rate, purchase price, selling price, and zero initial stock.
 
-php artisan boost:install
+---
+
+## Tech Stack
+
+- **Backend Framework**: Laravel 11 / PHP 8.3
+- **Database**: MySQL / SQLite
+- **Frontend**: Blade Templates, Vanilla CSS, Bootstrap 5.3, Bootstrap Icons
+- **Queue Driver**: Database Queued Jobs (`queue:work`)
+- **Code Style**: Laravel Pint (`vendor/bin/pint`)
+- **Test Runner**: PHPUnit (60 unit & feature test cases)
+
+---
+
+## Database Schema Overview
+
+```mermaid
+erDiagram
+    CATEGORIES ||--o{ CATEGORIES : "parent"
+    CATEGORIES ||--o{ PRODUCTS : "category"
+    UNITS ||--o{ PRODUCTS : "unit"
+    TAXES ||--o{ PRODUCTS : "tax"
+    SUPPLIERS ||--o{ PURCHASES : "supplier"
+    CUSTOMERS ||--o{ SALES : "customer"
+    PRODUCTS ||--o{ PURCHASE_ITEMS : "product"
+    PRODUCTS ||--o{ SALE_ITEMS : "product"
+    PRODUCTS ||--o{ STOCK_LOGS : "product"
+    PURCHASES ||--o{ PURCHASE_ITEMS : "items"
+    SALES ||--o{ SALE_ITEMS : "items"
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+### Primary Database Tables
+| Table | Description |
+| :--- | :--- |
+| `categories` | Product categories and subcategories (`parent_id`) |
+| `units` | Measurement unit definitions (`name`, `short_name`) |
+| `taxes` | Tax slabs (`name`, `rate`) |
+| `customers` | Customer directory (`name`, `email`, `phone`, `address`) |
+| `suppliers` | Supplier directory (`name`, `email`, `phone`, `address`) |
+| `products` | Product catalog with overall stock (`stock_quantity`) |
+| `purchases` | Purchase headers (`purchase_number`, `purchased_at`, `total_amount`) |
+| `purchase_items` | Purchase line items with batch barcode & stock (`barcode`, `stock_quantity`) |
+| `sales` | Sale headers (`invoice_number`, `sold_at`, `status`, `total_amount`) |
+| `sale_items` | Sale line items linked to purchase barcodes (`barcode`, `line_total`) |
+| `stock_logs` | Audit trail for stock changes (`area`, `mode`, `quantity`, `ref_1..3`) |
 
-## Contributing
+---
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Getting Started
 
-## Code of Conduct
+### Prerequisites
+- PHP $\ge$ 8.3
+- Composer $\ge$ 2.0
+- MySQL or SQLite
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### Installation Steps
 
-## Security Vulnerabilities
+1. **Clone the Repository**:
+   ```bash
+   git clone <repository-url>
+   cd mini-erp-system
+   ```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+2. **Install Composer Dependencies**:
+   ```bash
+   composer install
+   ```
+
+3. **Configure Environment Variables**:
+   Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+   Set your database credentials in `.env`:
+   ```ini
+   DB_CONNECTION=mysql
+   DB_HOST=127.0.0.1
+   DB_PORT=3306
+   DB_DATABASE=erp-system
+   DB_USERNAME=root
+   DB_PASSWORD=
+   ```
+
+4. **Generate Application Key**:
+   ```bash
+   php artisan key:generate
+   ```
+
+5. **Run Database Migrations & Seeders**:
+   ```bash
+   php artisan migrate:fresh --seed
+   ```
+   *Note: Seeders populate realistic master data, sample purchase orders, sales transactions, and stock logs using idempotent `firstOrCreate`/`updateOrCreate` inserts.*
+
+6. **Start the Application Server**:
+   ```bash
+   php artisan serve
+   ```
+   Access the web interface at `http://localhost:8000`.
+
+7. **Start the Queue Worker** *(for Async Notifications)*:
+   ```bash
+   php artisan queue:work
+   ```
+
+---
+
+## Running Tests
+
+The application includes unit and feature test coverage for all modules, barcode lookup, batch stock deduction, and order notifications.
+
+Run the test suite with PHPUnit:
+```bash
+php artisan test
+```
+
+---
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+This project is licensed under the MIT License.

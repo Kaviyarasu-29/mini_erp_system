@@ -1,0 +1,400 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Customer;
+use App\Models\Product;
+use App\Models\PurchaseItem;
+use App\Models\Sale;
+use App\Models\SaleItem;
+use App\Models\StockLog;
+use App\Models\Tax;
+use App\Services\CodeGeneratorService;
+use App\Services\OrderNotificationService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class SaleController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     */
+    public function index()
+    {
+        $sales = Sale::with(['customer', 'items.product'])
+            ->latest()
+            ->paginate(10);
+
+        return view('sales.index', compact('sales'));
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        $customers = Customer::where('is_active', true)->orderBy('name')->get();
+        $products = Product::with('tax')->where('is_active', true)->orderBy('name')->get();
+        $purchaseItems = PurchaseItem::with('product.tax')->get();
+        $taxes = Tax::where('is_active', true)->orderBy('name')->get();
+
+        return view('sales.create', compact('customers', 'products', 'purchaseItems', 'taxes'));
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function new()
+    {
+        return $this->create();
+    }
+
+    /**
+     * Scan and lookup item details by purchase item barcode via AJAX.
+     */
+    public function scanBarcode(string $code)
+    {
+        $code = trim($code);
+
+        $purchaseItem = PurchaseItem::with('product.tax')
+            ->where('barcode', $code)
+            ->first();
+
+        if ($purchaseItem && $purchaseItem->product) {
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'productId' => $purchaseItem->product_id,
+                    'productName' => $purchaseItem->product->name,
+                    'sku' => $purchaseItem->product->sku,
+                    'barcode' => $purchaseItem->barcode,
+                    'sellingPrice' => (float) ($purchaseItem->product->selling_price ?? 0),
+                    'taxRate' => (float) ($purchaseItem->product->tax->rate ?? 0),
+                ],
+            ]);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => "Purchase Item Barcode \"{$code}\" not found!",
+        ], 404);
+    }
+
+    /**
+     * Display the specified resource.
+     */
+    public function show(Sale $sale)
+    {
+        $sale->load(['customer', 'items.product.unit']);
+
+        return view('sales.show', compact('sale'));
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'customer_id' => ['required', 'exists:customers,id'],
+            'invoice_number' => ['nullable', 'string', 'max:255', 'unique:sales,invoice_number'],
+            'sold_at' => ['required', 'date'],
+            'payment_method' => ['required', 'string', 'max:50'],
+            'payment_status' => ['required', 'string', 'max:50'],
+            'status' => ['required', 'string', 'max:50'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['required', 'exists:products,id'],
+            'items.*.barcode' => ['nullable', 'string', 'max:255'],
+            'items.*.quantity' => ['required', 'numeric', 'gt:0'],
+            'items.*.unit_price' => ['required', 'numeric', 'min:0'],
+            'items.*.tax_rate' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        if (empty($validated['invoice_number'])) {
+            $validated['invoice_number'] = CodeGeneratorService::generateMonthBasedCode(
+                Sale::class,
+                'invoice_number',
+                $validated['sold_at'],
+                'sold_at'
+            );
+        }
+
+        $sale = DB::transaction(function () use ($validated) {
+            $subtotal = 0;
+            $taxAmount = 0;
+
+            foreach ($validated['items'] as $itemData) {
+                $qty = $itemData['quantity'];
+                $price = $itemData['unit_price'];
+                $rate = $itemData['tax_rate'] ?? 0;
+
+                $lineSubtotal = $qty * $price;
+                $lineTax = $lineSubtotal * ($rate / 100);
+
+                $subtotal += $lineSubtotal;
+                $taxAmount += $lineTax;
+            }
+
+            $sale = Sale::create([
+                'customer_id' => $validated['customer_id'],
+                'invoice_number' => $validated['invoice_number'],
+                'sale_number' => $validated['invoice_number'],
+                'sold_at' => $validated['sold_at'],
+                'subtotal' => $subtotal,
+                'tax_amount' => $taxAmount,
+                'total_amount' => $subtotal + $taxAmount,
+                'payment_method' => $validated['payment_method'],
+                'payment_status' => $validated['payment_status'],
+                'status' => $validated['status'],
+            ]);
+
+            foreach ($validated['items'] as $itemData) {
+                $qty = $itemData['quantity'];
+                $price = $itemData['unit_price'];
+                $rate = $itemData['tax_rate'] ?? 0;
+                $barcode = $itemData['barcode'] ?? null;
+
+                $lineSubtotal = $qty * $price;
+                $lineTax = $lineSubtotal * ($rate / 100);
+                $lineTotal = $lineSubtotal + $lineTax;
+
+                $saleItem = SaleItem::create([
+                    'sale_id' => $sale->id,
+                    'product_id' => $itemData['product_id'],
+                    'barcode' => $barcode,
+                    'quantity' => $qty,
+                    'unit_price' => $price,
+                    'tax_rate' => $rate,
+                    'tax_amount' => $lineTax,
+                    'line_total' => $lineTotal,
+                ]);
+
+                $this->deductBatchStock($itemData['product_id'], $barcode, $qty);
+                Product::where('id', $itemData['product_id'])->decrement('stock_quantity', $qty);
+
+                StockLog::create([
+                    'product_id' => $itemData['product_id'],
+                    'area' => 'sale',
+                    'mode' => '-',
+                    'quantity' => $qty,
+                    'ref_1' => $sale->id,
+                    'ref_2' => $saleItem->id,
+                    'ref_3' => $sale->customer_id,
+                ]);
+            }
+
+            return $sale;
+        });
+
+        OrderNotificationService::notifyOrderCreated($sale);
+        if ($sale->status === 'Completed') {
+            OrderNotificationService::notifyOrderCompleted($sale);
+        }
+
+        return redirect()
+            ->route('sales.index')
+            ->with('success', 'Sale recorded successfully.');
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit(Sale $sale)
+    {
+        $sale->load(['customer', 'items.product']);
+        $customers = Customer::where('is_active', true)->orderBy('name')->get();
+        $products = Product::with('tax')->where('is_active', true)->orderBy('name')->get();
+        $purchaseItems = PurchaseItem::with('product.tax')->get();
+        $taxes = Tax::where('is_active', true)->orderBy('name')->get();
+
+        return view('sales.edit', compact('sale', 'customers', 'products', 'purchaseItems', 'taxes'));
+    }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(Request $request, Sale $sale)
+    {
+        $validated = $request->validate([
+            'customer_id' => ['required', 'exists:customers,id'],
+            'invoice_number' => ['required', 'string', 'max:255', 'unique:sales,invoice_number,'.$sale->id],
+            'sold_at' => ['required', 'date'],
+            'payment_method' => ['required', 'string', 'max:50'],
+            'payment_status' => ['required', 'string', 'max:50'],
+            'status' => ['required', 'string', 'max:50'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['required', 'exists:products,id'],
+            'items.*.barcode' => ['nullable', 'string', 'max:255'],
+            'items.*.quantity' => ['required', 'numeric', 'gt:0'],
+            'items.*.unit_price' => ['required', 'numeric', 'min:0'],
+            'items.*.tax_rate' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        DB::transaction(function () use ($sale, $validated) {
+            foreach ($sale->items as $oldItem) {
+                $this->restoreBatchStock($oldItem->product_id, $oldItem->barcode, $oldItem->quantity);
+                Product::where('id', $oldItem->product_id)->increment('stock_quantity', $oldItem->quantity);
+            }
+
+            $sale->items()->delete();
+            StockLog::where('area', 'sale')->where('ref_1', $sale->id)->delete();
+
+            $subtotal = 0;
+            $taxAmount = 0;
+
+            foreach ($validated['items'] as $itemData) {
+                $qty = $itemData['quantity'];
+                $price = $itemData['unit_price'];
+                $rate = $itemData['tax_rate'] ?? 0;
+
+                $lineSubtotal = $qty * $price;
+                $lineTax = $lineSubtotal * ($rate / 100);
+
+                $subtotal += $lineSubtotal;
+                $taxAmount += $lineTax;
+            }
+
+            $sale->update([
+                'customer_id' => $validated['customer_id'],
+                'invoice_number' => $validated['invoice_number'],
+                'sale_number' => $validated['invoice_number'],
+                'sold_at' => $validated['sold_at'],
+                'subtotal' => $subtotal,
+                'tax_amount' => $taxAmount,
+                'total_amount' => $subtotal + $taxAmount,
+                'payment_method' => $validated['payment_method'],
+                'payment_status' => $validated['payment_status'],
+                'status' => $validated['status'],
+            ]);
+
+            foreach ($validated['items'] as $itemData) {
+                $qty = $itemData['quantity'];
+                $price = $itemData['unit_price'];
+                $rate = $itemData['tax_rate'] ?? 0;
+                $barcode = $itemData['barcode'] ?? null;
+
+                $lineSubtotal = $qty * $price;
+                $lineTax = $lineSubtotal * ($rate / 100);
+                $lineTotal = $lineSubtotal + $lineTax;
+
+                $saleItem = SaleItem::create([
+                    'sale_id' => $sale->id,
+                    'product_id' => $itemData['product_id'],
+                    'barcode' => $barcode,
+                    'quantity' => $qty,
+                    'unit_price' => $price,
+                    'tax_rate' => $rate,
+                    'tax_amount' => $lineTax,
+                    'line_total' => $lineTotal,
+                ]);
+
+                $this->deductBatchStock($itemData['product_id'], $barcode, $qty);
+                Product::where('id', $itemData['product_id'])->decrement('stock_quantity', $qty);
+
+                StockLog::create([
+                    'product_id' => $itemData['product_id'],
+                    'area' => 'sale',
+                    'mode' => '-',
+                    'quantity' => $qty,
+                    'ref_1' => $sale->id,
+                    'ref_2' => $saleItem->id,
+                    'ref_3' => $sale->customer_id,
+                ]);
+            }
+        });
+
+        OrderNotificationService::notifyOrderUpdated($sale);
+        if ($sale->status === 'Completed') {
+            OrderNotificationService::notifyOrderCompleted($sale);
+        } elseif ($sale->status === 'Cancelled') {
+            OrderNotificationService::notifyOrderCancelled($sale);
+        }
+
+        return redirect()
+            ->route('sales.index')
+            ->with('success', 'Sale updated successfully.');
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(Sale $sale)
+    {
+        OrderNotificationService::notifyOrderCancelled($sale);
+
+        DB::transaction(function () use ($sale) {
+            foreach ($sale->items as $item) {
+                $this->restoreBatchStock($item->product_id, $item->barcode, $item->quantity);
+                Product::where('id', $item->product_id)->increment('stock_quantity', $item->quantity);
+            }
+            StockLog::where('area', 'sale')->where('ref_1', $sale->id)->delete();
+            $sale->items()->delete();
+            $sale->delete();
+        });
+
+        return redirect()
+            ->route('sales.index')
+            ->with('success', 'Sale deleted successfully.');
+    }
+
+    /**
+     * Deduct stock from purchase items (batches) based on barcode or FIFO.
+     */
+    private function deductBatchStock(int $productId, ?string $barcode, float $quantity): void
+    {
+        $remaining = $quantity;
+
+        if (!empty($barcode)) {
+            $pItem = PurchaseItem::where('barcode', $barcode)->first();
+            if ($pItem) {
+                $deduct = min($remaining, (float) $pItem->stock_quantity);
+                if ($deduct > 0) {
+                    $pItem->decrement('stock_quantity', $deduct);
+                    $remaining -= $deduct;
+                }
+            }
+        }
+
+        if ($remaining > 0) {
+            $items = PurchaseItem::where('product_id', $productId)
+                ->where('stock_quantity', '>', 0)
+                ->orderBy('id', 'asc')
+                ->get();
+
+            foreach ($items as $item) {
+                if ($remaining <= 0) {
+                    break;
+                }
+                $deduct = min($remaining, (float) $item->stock_quantity);
+                $item->decrement('stock_quantity', $deduct);
+                $remaining -= $deduct;
+            }
+
+            if ($remaining > 0) {
+                $lastItem = PurchaseItem::where('product_id', $productId)->latest('id')->first();
+                if ($lastItem) {
+                    $lastItem->decrement('stock_quantity', $remaining);
+                }
+            }
+        }
+    }
+
+    /**
+     * Restore stock to purchase items (batches).
+     */
+    private function restoreBatchStock(int $productId, ?string $barcode, float $quantity): void
+    {
+        if (!empty($barcode)) {
+            $pItem = PurchaseItem::where('barcode', $barcode)->first();
+            if ($pItem) {
+                $pItem->increment('stock_quantity', $quantity);
+                return;
+            }
+        }
+
+        $lastItem = PurchaseItem::where('product_id', $productId)->latest('id')->first();
+        if ($lastItem) {
+            $lastItem->increment('stock_quantity', $quantity);
+        }
+    }
+}
