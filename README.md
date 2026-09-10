@@ -4,6 +4,18 @@ A modern, responsive Enterprise Resource Planning (ERP) application built with *
 
 ---
 
+## Demo Media & Documentation
+
+📁 **[Google Drive Folder: Demo Videos & Screenshot PDFs](https://drive.google.com/drive/folders/1XQrojmhCfTCcck8UeUBeWvN9IYtWON5l?usp=sharing)**
+
+The Google Drive repository includes the following demonstration videos and screenshot PDF documentation:
+
+- 🎬 **`AI-Prompt.mp4`**: Video recording of AI prompt interactions & development session.
+- 🎬 **`Mini-ERP-System.mp4`**: Comprehensive video demo of the Mini ERP System (Purchases, Sales, Barcode Scanning, Stock Tracking & Notifications).
+- 📄 **`Prompts-Screenshots.pdf`**: PDF document containing detailed screenshots of AI prompts and workflows.
+
+---
+
 ## Key Modules & Features
 
 ### 1. Purchase Order Management
