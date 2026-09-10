@@ -10,6 +10,7 @@ use App\Models\SaleItem;
 use App\Models\StockLog;
 use App\Models\Tax;
 use App\Services\CodeGeneratorService;
+use App\Services\OrderNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -118,7 +119,7 @@ class SaleController extends Controller
             );
         }
 
-        DB::transaction(function () use ($validated) {
+        $sale = DB::transaction(function () use ($validated) {
             $subtotal = 0;
             $taxAmount = 0;
 
@@ -181,7 +182,14 @@ class SaleController extends Controller
                     'ref_3' => $sale->customer_id,
                 ]);
             }
+
+            return $sale;
         });
+
+        OrderNotificationService::notifyOrderCreated($sale);
+        if ($sale->status === 'Completed') {
+            OrderNotificationService::notifyOrderCompleted($sale);
+        }
 
         return redirect()
             ->route('sales.index')
@@ -295,6 +303,13 @@ class SaleController extends Controller
             }
         });
 
+        OrderNotificationService::notifyOrderUpdated($sale);
+        if ($sale->status === 'Completed') {
+            OrderNotificationService::notifyOrderCompleted($sale);
+        } elseif ($sale->status === 'Cancelled') {
+            OrderNotificationService::notifyOrderCancelled($sale);
+        }
+
         return redirect()
             ->route('sales.index')
             ->with('success', 'Sale updated successfully.');
@@ -305,6 +320,8 @@ class SaleController extends Controller
      */
     public function destroy(Sale $sale)
     {
+        OrderNotificationService::notifyOrderCancelled($sale);
+
         DB::transaction(function () use ($sale) {
             foreach ($sale->items as $item) {
                 $this->restoreBatchStock($item->product_id, $item->barcode, $item->quantity);

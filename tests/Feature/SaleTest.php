@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\SendOrderNotificationJob;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Product;
@@ -11,7 +12,10 @@ use App\Models\Sale;
 use App\Models\Supplier;
 use App\Models\Tax;
 use App\Models\Unit;
+use App\Services\OrderNotificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class SaleTest extends TestCase
@@ -21,7 +25,7 @@ class SaleTest extends TestCase
     private function createDependencies(): array
     {
         $supplier = Supplier::create(['name' => 'Supplier A', 'is_active' => true]);
-        $customer = Customer::create(['name' => 'Customer B', 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Customer B', 'email' => 'customerb@example.com', 'is_active' => true]);
         $category = Category::create(['name' => 'General']);
         $unit = Unit::create(['name' => 'Pieces', 'short_name' => 'pcs', 'is_active' => true]);
         $tax = Tax::create(['name' => 'GST 18%', 'rate' => 18, 'is_active' => true]);
@@ -140,7 +144,7 @@ class SaleTest extends TestCase
             'sold_at' => '2026-09-10',
             'payment_method' => 'Cash',
             'payment_status' => 'Paid',
-            'status' => 'Completed',
+            'status' => 'Pending',
             'items' => [
                 [
                     'product_id' => $product->id,
@@ -177,6 +181,70 @@ class SaleTest extends TestCase
             'mode' => '-',
             'quantity' => 3,
         ]);
+    }
+
+    public function test_dispatches_order_notification_job_when_sale_is_created(): void
+    {
+        Queue::fake();
+
+        [$customer, $product, $purchaseItem] = $this->createDependencies();
+
+        $response = $this->post(route('sales.store'), [
+            'customer_id' => $customer->id,
+            'sold_at' => '2026-09-10',
+            'payment_method' => 'Cash',
+            'payment_status' => 'Paid',
+            'status' => 'Completed',
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'barcode' => 'BC001',
+                    'quantity' => 2,
+                    'unit_price' => 150,
+                    'tax_rate' => 18,
+                ],
+            ],
+        ]);
+
+        $response->assertRedirect(route('sales.index'));
+
+        Queue::assertPushed(SendOrderNotificationJob::class, function (SendOrderNotificationJob $job) use ($customer) {
+            return $job->sale->customer_id === $customer->id && $job->event === 'created';
+        });
+
+        Queue::assertPushed(SendOrderNotificationJob::class, function (SendOrderNotificationJob $job) use ($customer) {
+            return $job->sale->customer_id === $customer->id && $job->event === 'completed';
+        });
+    }
+
+    public function test_job_logs_formatted_notification_message_when_handled(): void
+    {
+        Log::shouldReceive('info')
+            ->once()
+            ->withArgs(function (string $message) {
+                return str_contains($message, '[ORDER CREATED]')
+                    && str_contains($message, 'INV-TEST-01')
+                    && str_contains($message, '354.00');
+            });
+
+        [$customer, $product, $purchaseItem] = $this->createDependencies();
+
+        $sale = Sale::create([
+            'customer_id' => $customer->id,
+            'invoice_number' => 'INV-TEST-01',
+            'sale_number' => 'INV-TEST-01',
+            'sold_at' => now(),
+            'subtotal' => 300,
+            'tax_amount' => 54,
+            'total_amount' => 354,
+            'payment_method' => 'Cash',
+            'payment_status' => 'Paid',
+            'status' => 'Completed',
+        ]);
+
+        $message = OrderNotificationService::formatMessage($sale, 'created');
+        $job = new SendOrderNotificationJob($sale, 'created', $message);
+        $job->handle();
     }
 
     public function test_can_view_sale_show_page(): void
